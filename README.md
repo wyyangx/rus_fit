@@ -18,6 +18,8 @@ python rus_fit_inv.py
 
 # Data regression for chemical data
 
+Use the proposed DNN structure to process the [Chemical data](https://yarpiz.com/263/ypml113-gmdh).
+
 ### Datasets
 [Chemical data](https://yarpiz.com/263/ypml113-gmdh)
 
@@ -34,4 +36,4 @@ python dnn_regression.py
  MSE             | 5.80             | 4.82             | 4.23   
  RMSE            | 2.41             | 2.19             | 2.06
 
-To calculate the MSE/RMSE score of the Group Method of Data Handling (GMDH) on the chemical data, download the [matalb code](https://yarpiz.com/263/ypml113-gmdh), and run this MATLAB script
+To calculate the MSE/RMSE score of the Group Method of Data Handling (GMDH) on the chemical data, download the [matalb code](https://yarpiz.com/wp-content/uploads/2015/09/ypml113-gmdh.zip), and run this MATLAB script
