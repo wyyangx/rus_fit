@@ -16,7 +16,7 @@ PZT-8 and LiNbO3 samples with diverse parameters, including elastic stiffness co
 python rus_fit_inv.py
 ```
 
-# Date regression for chemical data
+# Data regression for chemical data
 
 ### Datasets
 [Chemical data](https://yarpiz.com/263/ypml113-gmdh)
