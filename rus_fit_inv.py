@@ -20,6 +20,7 @@ def bn(x, is_training, name):
 
 def batch_norm(x, is_training, name, update_mean_var=True, decay=0.99, epsilon=1e-3):
     """
+    # is_training 和 update_mean_var 为True，才更新均值方差
     :param x: input with shape=[batch_size，Height，Width，Channels]
     :param is_training: is it in training? Value = True or False
     :param name:
@@ -79,11 +80,10 @@ def active_fun(x, leak=0.2, name='active_fun', type='sigmoid'):
 
 
 def relu(x, name='active_fun'):
-    # return tf.maximum(x, 0, name=name)
-    return tf.maximum(x, 0.2 * x, name=name)
+    return tf.maximum(x, 0, name=name)  # tf.maximum(x, 0.2 * x, name=name)
 
 
-def dense(x, output_size, stddev=0.5, bias_start=0.0, reuse=False, name='dense', alpha=0.0001):
+def dense(x, output_size, stddev=0.5, bias_start=0.0, reuse=False, name='dense'):
     shape = x.get_shape().as_list()
     with tf.variable_scope(name, reuse=reuse):
         W = tf.get_variable(
@@ -93,10 +93,6 @@ def dense(x, output_size, stddev=0.5, bias_start=0.0, reuse=False, name='dense',
         bias = tf.get_variable(
             'biases', [output_size],
             initializer=tf.constant_initializer(bias_start))
-
-        # if alpha > 0:
-        #     tf.add_to_collection('losses', tf.contrib.layers.l1_regularizer(alpha)(W))
-        #     tf.add_to_collection('losses', tf.contrib.layers.l1_regularizer(alpha)(bias))
 
         out = tf.matmul(x, W) + bias
     return out
@@ -141,33 +137,36 @@ def dropout(x, level):  # level为神经元保留的概率值，在0-1之间
     return x
 
 
+# 网络节点数
 LNodes = []
+# 激活函数 'sigmoid'/'tanh'/'relu'
 af_type = 'sigmoid'
+# 网络类型
+net_type = 'pro'
 
 
 # Building the network
-def fit_net(input, output_dim, is_training, reuse, name="fit_net", alpha=0.0001):
+def fit_net(paras, output_dim, is_training, reuse, name="fit_net"):
     with tf.variable_scope(name, reuse=reuse):
-        # l = 0
-        # net = input
-        # for lu in LNodes:
-        #     l += 1
-        #     net = active_fun(bn(dense(net, lu, name="fc%d" % l, alpha=alpha),
-        #                         is_training, name="bn%d" % l), name="a%d" % l, type=af_type)
-        #
-        # l += 1
-        # net = dense(net, output_dim, name="fc%d_1" % l, alpha=alpha)
-
-        l = 0
-        net = input
-        for lu in LNodes:
-            l += 1
-            net = active_fun(bn(dense(net, lu, name="fc%d" % l, alpha=alpha),
-                                is_training, name="bn%d" % l), name="a%d" % l, type=af_type)
-            net = tf.concat([net, input], 1)
-
-        l += 1
-        net = dense(net, output_dim, name="fc%d_1" % l, alpha=alpha)
+        if net_type == 'pro':
+            l_n = 0
+            net = paras
+            for lu in LNodes:
+                l_n += 1
+                net = active_fun(bn(dense(net, lu, name="fc%d" % l_n),
+                                    is_training, name="bn%d" % l_n), name="a%d" % l_n, type=af_type)
+                net = tf.concat([net, paras], 1)
+            l_n += 1
+            net = dense(net, output_dim, name="fc%d_1" % l_n)
+        else:
+            l_n = 0
+            net = paras
+            for lu in LNodes:
+                l_n += 1
+                net = active_fun(bn(dense(net, lu, name="fc%d" % l_n),
+                                    is_training, name="bn%d" % l_n), name="a%d" % l_n, type=af_type)
+            l_n += 1
+            net = dense(net, output_dim, name="fc%d_1" % l_n)
     return net
 
 
@@ -390,7 +389,7 @@ class RusFit:
                     # Run optimization op (backprop) and cost op (to get loss value)
                     sess.run([optimizer], feed_dict={input_x: bxs, out_y: bys})
 
-                if (e + 1) < 10000:
+                if (e + 1) < 5000:
                     continue
 
                 if (e + 1) % 5 != 0:
@@ -483,7 +482,7 @@ class RusFit:
             return relative_error
 
 
-def evaluate_net(type, net_params, nft):
+def evaluate_net(type, net_params, afun, ntype):
     logging.info("=========================================================================")
     logging.info("材料：%s" % type)
 
@@ -500,13 +499,19 @@ def evaluate_net(type, net_params, nft):
     np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
     global LNodes
     global af_type
+    global net_type
 
     LNodes = net_params
-    af_type = nft
+    af_type = afun
+    net_type = ntype
 
     logging.info("网络参数：")
     logging.info(LNodes)
     logging.info("激活函数：%s" % af_type)
+    if net_type == 'pro':
+        logging.info(">>>>>>>>>>改进的网络")
+    else:
+        logging.info(">>>>>>>>>>传统的网络")
 
     relative_error = np.empty([0, 200])
     fold_num = 5
@@ -525,38 +530,9 @@ def evaluate_net(type, net_params, nft):
     np.save("./rus_data/re_%s_l%d_n%d.npy" % (type, len(LNodes), LNodes[0]), relative_error)
 
 
-def re_static():
-    # re_LiNbO3_tanh_l6_n320
-    re = np.load('./rus_data/re_LiNbO3_tanh_l6_n320.npy')
-    re_st = np.zeros([6])
-    count = 0
-
-    np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
-    for n in range(re.shape[0]):
-        for p in range(re.shape[1]):
-            if re[n, p] < 0.05:
-                index = 0
-            elif re[n, p] < 0.1:
-                index = 1
-            elif re[n, p] < 0.2:
-                index = 2
-            elif re[n, p] < 0.5:
-                index = 3
-            elif re[n, p] < 1.0:
-                index = 4
-            else:
-                index = 5
-            re_st[index] += 1
-            count += 1
-
-    re_st /= count
-    print(re_st)
-
-
 if __name__ == '__main__':
     logging.basicConfig(filename='./results.log', level=logging.INFO, format='%(asctime)s  %(message)s')
     logging.info("")
-    logging.info(">>>>>>>>>>网络每一层的输出拼接网络的输入作为下一层的输入")
     #
     # # evaluate_net('LiNbO3', [256, 256], 'lrelu')
     # # evaluate_net('LiNbO3', [256, 256, 256], 'lrelu')
@@ -577,15 +553,8 @@ if __name__ == '__main__':
     # evaluate_net('PZT8', [128, 128, 128], 'lrelu')
     # evaluate_net('PZT8', [192, 192, 192], 'sigmoid')
     # evaluate_net('PZT8', [192, 192, 192], 'tanh')
+    # evaluate_net('PZT8', [256, 256, 256], 'sigmoid')
 
-    evaluate_net('PZT8', [256, 256, 256], 'sigmoid')
+    # evaluate_net('PZT8', [256, 256, 256, 256], 'tanh', 'pro')
+    evaluate_net('PZT8', [192, 192, 192], 'tanh', 'pro')
 
-    # re_static()
-
-    # np.set_printoptions(formatter={'float': '{: 0.2f}'.format})
-    # out_freqs = np.load('./rus_data/out_freqs_PZT8_tanh_l6_n320.npy')
-    # real_freqs = np.load('./rus_data/real_freqs_PZT8_tanh_l6_n320.npy')
-    # relative = 100 * np.abs(real_freqs - out_freqs) / real_freqs
-    # print(real_freqs[0, :])
-    # print(out_freqs[0, :])
-    # print(relative[0, :])
